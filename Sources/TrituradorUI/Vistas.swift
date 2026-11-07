@@ -93,7 +93,7 @@ struct Cabecera<Accesorio: View>: View {
             .frame(width: 46, height: 46)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Triturador")
+                Text("CleanUninstall")
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                 Text(lema)
@@ -145,7 +145,7 @@ struct PantallaVacia: View {
                     Text("Arrastra una app aquí")
                         .font(.system(size: 21, weight: .bold, design: .rounded))
                         .foregroundStyle(Tema.tinta)
-                    Text("Triturador busca lo que la app dejó escondido —preferencias, cachés, servicios en "
+                    Text("CleanUninstall busca lo que la app dejó escondido —preferencias, cachés, servicios en "
                          + "segundo plano y ayudantes con permisos— y lo manda a la Papelera. Nada se borra de verdad.")
                         .font(.system(size: 13))
                         .foregroundStyle(Tema.tintaSuave)
@@ -542,7 +542,7 @@ struct AvisoDeAccesoTotal: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "lock.shield.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(Tema.ambar)
-            Text("Triturador no tiene «Acceso total al disco». Sin él macOS le esconde parte de los datos de otras apps, "
+            Text("CleanUninstall no tiene «Acceso total al disco». Sin él macOS le esconde parte de los datos de otras apps, "
                  + "y la lista puede quedar incompleta.")
                 .font(.system(size: 12.5)).foregroundStyle(Tema.tinta)
                 .fixedSize(horizontal: false, vertical: true)

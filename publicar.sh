@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Publica una versión de Triturador en GitHub: prueba, compila, arma el DMG, etiqueta
+# Publica una versión de CleanUninstall en GitHub: prueba, compila, arma el DMG, etiqueta
 # y crea la Release con el DMG adjunto para poder descargarlo desde otro Mac.
 #
 #     ./publicar.sh 1.0.1 "Arreglado el botón Procesar"
@@ -45,7 +45,7 @@ fi
 echo "▸ Compilando e instalando…"
 ./build_app.sh > /dev/null
 echo "▸ Armando el DMG…"
-DMG="$PWD/.build/Triturador-$VERSION.dmg"
+DMG="$PWD/.build/CleanUninstall-$VERSION.dmg"
 ./build_dmg.sh "$DMG" > /dev/null
 
 echo "▸ Etiquetando y subiendo…"
@@ -58,10 +58,10 @@ if gh release view "v$VERSION" >/dev/null 2>&1; then
     gh release upload "v$VERSION" "$DMG" --clobber
 else
     gh release create "v$VERSION" "$DMG" \
-        --title "Triturador $VERSION" \
+        --title "CleanUninstall $VERSION" \
         --notes "${NOTAS:-Sin notas.}
 
-Descarga el .dmg de abajo, ábrelo y arrastra Triturador a Applications.
+Descarga el .dmg de abajo, ábrelo y arrastra CleanUninstall a Applications.
 La primera vez: Ajustes del Sistema › Privacidad y Seguridad › «Abrir de todos modos»."
 fi
 

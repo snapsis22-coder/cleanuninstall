@@ -1,11 +1,11 @@
 #!/bin/zsh
-# Compila Triturador, arma el bundle .app, lo firma e instala en /Applications.
+# Compila CleanUninstall (antes Triturador), arma el bundle .app, lo firma e instala en /Applications.
 # Molde tomado de ~/Developer/SubFix/build_app.sh.
 set -e
 
 cd "$(dirname "$0")"
 PROYECTO="$PWD"
-NOMBRE_APP="Triturador"
+NOMBRE_APP="CleanUninstall"
 PRODUCTO="Triturador"
 DESTINO="/Applications/${NOMBRE_APP}.app"
 IDENTIDAD="snapsis-dev"

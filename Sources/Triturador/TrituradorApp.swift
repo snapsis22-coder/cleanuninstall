@@ -5,10 +5,13 @@ import TrituradorUI
 struct TrituradorApp: App {
     @StateObject private var modelo = Modelo()
 
-    init() { Actualizaciones.compartido.arrancar() }
+    init() {
+        // Viniendo de Triturador 1.1.0: renombrarse y reabrirse antes de nada
+        if !CambioDeNombre.siHaceFalta() { Actualizaciones.compartido.arrancar() }
+    }
 
     var body: some Scene {
-        Window("Triturador", id: "principal") {
+        Window("CleanUninstall", id: "principal") {
             VistaPrincipal(modelo: modelo)
                 .frame(minWidth: 720, minHeight: 580)
                 // Una app soltada sobre el icono del Dock llega por aquí.

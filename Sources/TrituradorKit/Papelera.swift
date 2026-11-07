@@ -103,7 +103,7 @@ public struct Papelera: Sendable {
 
     private func comoAdministrador(_ elementos: [Elemento]) async -> ResultadoAdmin {
         let guion = Self.guionDeAdministrador(elementos, papelera: entorno.papelera, uid: entorno.uid, gid: entorno.gid)
-        let aviso = "Triturador necesita permiso para mover a la Papelera archivos del sistema que dejó la app."
+        let aviso = "CleanUninstall necesita permiso para mover a la Papelera archivos del sistema que dejó la app."
         let resultado = ejecutar("/usr/bin/osascript", ["-e", Self.appleScript(guion, aviso: aviso)])
 
         var salida = ResultadoAdmin()
@@ -199,7 +199,7 @@ public struct Papelera: Sendable {
     static func explicar(_ error: Error) -> String {
         let e = error as NSError
         if esDePermisos(error) {
-            return "macOS no me dejó moverlo. Prueba a darle a Triturador «Acceso total al disco» o «Administración de apps» en Ajustes del Sistema."
+            return "macOS no me dejó moverlo. Prueba a darle a CleanUninstall «Acceso total al disco» o «Administración de apps» en Ajustes del Sistema."
         }
         if e.domain == NSCocoaErrorDomain, e.code == NSFileNoSuchFileError || e.code == NSFileReadNoSuchFileError {
             return "Ya no estaba."

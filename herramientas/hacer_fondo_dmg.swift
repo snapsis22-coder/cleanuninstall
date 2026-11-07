@@ -91,7 +91,7 @@ func pintar(_ fondo: Fondo) -> NSImage? {
                     withAttributes: atributos)
     }
 
-    escribir("Triturador", 30, .semibold, 0.95, 48)
+    escribir("CleanUninstall", 30, .semibold, 0.95, 48)
     escribir("Desinstala apps sin dejar rastro", 14, .regular, fondo.textoOscuro ? 0.7 : 0.6, 88)
     lienzo.unlockFocus()
     return lienzo

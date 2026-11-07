@@ -61,6 +61,6 @@ public enum Guardia {
             let base = carpeta.standardizedFileURL.path
             return ruta.hasPrefix(base + "/") && ruta != base
         }
-        return dentroDeCatalogo ? nil : "No está en ninguna de las carpetas donde Triturador busca."
+        return dentroDeCatalogo ? nil : "No está en ninguna de las carpetas donde CleanUninstall busca."
     }
 }

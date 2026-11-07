@@ -3,11 +3,11 @@ import CryptoKit
 import SwiftUI
 
 // Actualización desde las Releases de GitHub. El mismo archivo vive en cada app
-// (SubFix, Triturador, Calculadora+, Peek a Boo); sólo cambian estas dos líneas.
+// (SubFix, CleanUninstall, Calculadora+, Peek a Boo, TRM Fixer); sólo cambian estas dos líneas.
 enum ConfigDeActualizacion {
-    static let repositorio = "snapsis22-coder/triturador"
+    static let repositorio = "snapsis22-coder/cleanuninstall"
     /// Cómo se llama el .app dentro del DMG.
-    static let app = "Triturador"
+    static let app = "CleanUninstall"
     /// Repo privado: se consulta y se baja con `gh` y la sesión de GitHub del Mac,
     /// sin guardar ninguna clave dentro de la app.
     static let privado = false
@@ -15,6 +15,11 @@ enum ConfigDeActualizacion {
 
 /// Busca al abrir (como mucho una vez cada 20 h) o desde el menú, y avisa en una ventanita.
 /// Sólo instala cuando el usuario pulsa «Actualizar», y no mientras la app está ocupada.
+///
+/// Con «Actualizar automáticamente» (lo escoge el usuario; viene apagado) busca también
+/// cada 6 h con la app abierta, baja y comprueba la versión nueva en segundo plano sin
+/// preguntar, la instala AL CERRAR la app (para no cortar nada a medias) y, al abrirla
+/// otra vez, avisa: «Se actualizó a la X», con las novedades.
 ///
 /// La confianza se apoya en dos cosas: el SHA-256 que publica GitHub y que la app nueva
 /// esté firmada con **el mismo certificado** que la instalada. Como la descarga la hace la
@@ -39,12 +44,22 @@ final class Actualizaciones: ObservableObject {
         case descargando(Version, Double)
         case instalando(Version)
         case fallo(String)
+        case actualizada(numero: String, notas: String)   // aviso tras instalarse sola
     }
 
     @Published private(set) var estado = Estado.quieto
     @Published var buscarSola = UserDefaults.standard.object(forKey: "actualizar.alAbrir") as? Bool ?? true {
         didSet { UserDefaults.standard.set(buscarSola, forKey: "actualizar.alAbrir") }
     }
+    @Published var automatico = UserDefaults.standard.bool(forKey: "actualizar.automatico") {
+        didSet { UserDefaults.standard.set(automatico, forKey: "actualizar.automatico") }
+    }
+    /// Versión ya bajada y comprobada, esperando a que se cierre la app para instalarse.
+    @Published private(set) var lista: (version: Version, app: URL)?
+    private var preparando = false
+    private var vigilante: Task<Void, Never>?
+    private var alCerrar: NSObjectProtocol?
+
     /// La app dice aquí si está a mitad de algo que no se debe cortar.
     var ocupada: () -> Bool = { false }
 
@@ -60,7 +75,34 @@ final class Actualizaciones: ObservableObject {
 
     /// Se llama al arrancar la app.
     func arrancar() {
-        guard buscarSola else { return }
+        // Instalar lo que haya quedado listo, justo antes de que la app se cierre
+        alCerrar = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: nil
+        ) { _ in MainActor.assumeIsolated { Actualizaciones.compartido.instalarLaLista() } }
+
+        // ¿Se instaló sola al cerrar la vez pasada? → avisar
+        if let aviso = UserDefaults.standard.dictionary(forKey: "actualizar.instalada"),
+           let numero = aviso["numero"] as? String {
+            UserDefaults.standard.removeObject(forKey: "actualizar.instalada")
+            if numero == Self.versionActual {
+                Task {
+                    try? await Task.sleep(for: .seconds(1.5))   // que la ventana principal salga primero
+                    estado = .actualizada(numero: numero, notas: aviso["notas"] as? String ?? "")
+                    mostrar()
+                }
+            }
+        }
+
+        // Con la app abierta: cada 6 h (solo en modo automático, para no sacar
+        // ventanitas a media tarea a quien prefiere que le pregunten)
+        vigilante = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(6 * 3600))
+                if automatico { await buscar(aMano: false) }
+            }
+        }
+
+        guard buscarSola || automatico else { return }
         let ultima = UserDefaults.standard.object(forKey: "actualizar.ultima") as? Date ?? .distantPast
         guard Date().timeIntervalSince(ultima) > 20 * 3600 else { return }
         Task {
@@ -79,7 +121,10 @@ final class Actualizaciones: ObservableObject {
             let nueva = try await Self.consultarGitHub()
             UserDefaults.standard.set(Date(), forKey: "actualizar.ultima")
             let omitida = UserDefaults.standard.string(forKey: "actualizar.omitida")
-            if let nueva, aMano || nueva.numero != omitida {
+            if let nueva, automatico, !aMano {
+                estado = .quieto
+                await prepararEnSegundoPlano(nueva)
+            } else if let nueva, aMano || nueva.numero != omitida {
                 estado = .disponible(nueva)
                 mostrar()
             } else {
@@ -101,6 +146,41 @@ final class Actualizaciones: ObservableObject {
         estado = .quieto
         ventana?.close()
         ventana = nil
+    }
+
+    // MARK: Modo automático
+
+    /// Baja y comprueba (hash, firma, versión) sin enseñar nada; queda lista para
+    /// instalarse al cerrar la app.
+    private func prepararEnSegundoPlano(_ version: Version) async {
+        if let lista, lista.version.numero == version.numero { return }
+        guard !preparando, !Bundle.main.bundleURL.path.hasPrefix("/Volumes/") else { return }
+        preparando = true
+        defer { preparando = false }
+        let instalada = Bundle.main.bundleURL
+        do {
+            let dmg = try await Self.descargar(version) { _ in }
+            let nueva = try await Task.detached {
+                try Self.preparar(dmg: dmg, version: version.numero, contra: instalada)
+            }.value
+            lista = (version, nueva)
+        } catch {
+            // En silencio: se reintenta en la próxima búsqueda
+        }
+    }
+
+    /// Al cerrarse la app: cambia la vieja (a la Papelera) por la nueva ya comprobada
+    /// y deja anotado el aviso para la próxima vez que se abra.
+    fileprivate func instalarLaLista() {
+        guard let lista else { return }
+        self.lista = nil
+        do {
+            try Self.instalar(lista.app, en: Bundle.main.bundleURL)
+            UserDefaults.standard.set(["numero": lista.version.numero, "notas": lista.version.notas],
+                                      forKey: "actualizar.instalada")
+        } catch {
+            // Si falla, la vieja vuelve a su sitio (lo hace `instalar`) y se intenta otro día
+        }
     }
 
     // MARK: Instalar
@@ -169,7 +249,11 @@ final class Actualizaciones: ObservableObject {
         if let h = hash, h.hasPrefix("sha256:") { hash = String(h.dropFirst(7)) } else { hash = nil }
         var numero = p.tag_name
         if numero.lowercased().hasPrefix("v") { numero.removeFirst() }
-        return Version(numero: numero, etiqueta: p.tag_name, notas: p.body ?? "",
+        // Sin el pie que publicar.sh pone para quien baja el DMG a mano
+        var notas = p.body ?? ""
+        if let pie = notas.range(of: "Descarga el .dmg de abajo") { notas = String(notas[..<pie.lowerBound]) }
+        notas = notas.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Version(numero: numero, etiqueta: p.tag_name, notas: notas,
                        dmg: dmg.browser_download_url, sha256: hash)
     }
 
@@ -378,6 +462,9 @@ struct VentanaDeActualizacion: View {
                 .frame(height: 120)
                 .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary.opacity(0.5)))
             }
+            Toggle("Actualizar automáticamente de ahora en adelante", isOn: $modelo.automatico)
+                .toggleStyle(.checkbox).font(.callout)
+                .help("Se baja sola, se instala al cerrar la app y te avisa al abrirla")
             HStack {
                 Toggle("Buscar al abrir", isOn: $modelo.buscarSola).toggleStyle(.checkbox).font(.callout)
                 Spacer()
@@ -400,6 +487,27 @@ struct VentanaDeActualizacion: View {
             Text("Ya tienes la última versión").font(.headline)
             Text("\(app) \(Actualizaciones.versionActual) es la más reciente.").font(.callout).foregroundStyle(.secondary)
             HStack { Spacer(); Button("Aceptar") { modelo.cerrar() }.keyboardShortcut(.defaultAction) }
+        case .actualizada(let numero, let notas):
+            Text("\(app) se actualizó a la \(numero)").font(.headline)
+            Text("Se instaló sola al cerrar la app. Esto es lo nuevo:")
+                .font(.callout).foregroundStyle(.secondary)
+            if !notas.isEmpty {
+                ScrollView {
+                    Text((try? AttributedString(markdown: notas, options: .init(
+                        interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(notas))
+                        .font(.callout).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                        .padding(10)
+                }
+                .frame(height: 120)
+                .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary.opacity(0.5)))
+            }
+            HStack {
+                Toggle("Actualizar automáticamente", isOn: $modelo.automatico)
+                    .toggleStyle(.checkbox).font(.callout)
+                Spacer()
+                Button("Aceptar") { modelo.cerrar() }.keyboardShortcut(.defaultAction)
+            }
+            .padding(.top, 4)
         case .fallo(let motivo):
             Text("No se pudo actualizar").font(.headline)
             Text(motivo).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -418,5 +526,9 @@ struct ComandosDeActualizacion: View {
     var body: some View {
         Button("Buscar actualizaciones…") { Task { await modelo.buscar(aMano: true) } }
         Toggle("Buscar actualizaciones al abrir", isOn: $modelo.buscarSola)
+        Toggle("Actualizar automáticamente", isOn: $modelo.automatico)
+        if let lista = modelo.lista {
+            Text("La \(lista.version.numero) se instalará al cerrar \(ConfigDeActualizacion.app)")
+        }
     }
 }

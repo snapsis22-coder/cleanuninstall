@@ -102,7 +102,7 @@ extension AppObjetivo {
         } else if id.hasPrefix("com.apple."), firmadaPorAppleComoSistema(url) {
             protegida = "Es parte de macOS."
         } else if let propio = propioIdentificador, id == propio {
-            protegida = "Es el propio Triturador."
+            protegida = "Es el propio CleanUninstall."
         }
 
         return AppObjetivo(
