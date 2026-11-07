@@ -53,7 +53,7 @@ public struct VistaPrincipal: View {
 
     private var lema: String {
         switch modelo.fase {
-        case .vacio: "Quita una app y todo lo que deja escondido"
+        case .vacio: "Desinstala una app y todo lo que deja escondido en tu sistema"
         case .analizando: "Buscando sus restos…"
         case .resultados: "Revisa la lista y tritura"
         case .triturando: "Triturando…"
